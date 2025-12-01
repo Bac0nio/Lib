@@ -10,81 +10,49 @@ local Services = {
 
 local Player = Services.Players.LocalPlayer
 
+-- X11-inspired configuration
 local CONFIG = {
     TOGGLE_KEY = "P",
     TOGGLE_COOLDOWN = 0.25,
     
     GUI = {
-        X = 200, Y = 120,
-        WIDTH = 770, HEIGHT = 520,
-        LEFT_WIDTH = 195
+        X = 20, Y = 60,
+        WIDTH = 300, HEIGHT = 400,
+        TAB_HEIGHT = 20,
+        TITLE_HEIGHT = 25
     },
     
     COLORS = {
-        LEFT_PANEL = Color3.fromRGB(5, 5, 5),
-        RIGHT_PANEL = Color3.fromRGB(0, 0, 0),
-        NICK_BLOCK = Color3.fromRGB(30, 30, 30),
-        NICK_CIRCLE = Color3.fromRGB(70, 70, 70),
-        BLOCK_BG = Color3.fromRGB(25, 25, 25),
-        TOGGLE_OFF = Color3.fromRGB(60, 60, 60),
-        TOGGLE_ON = Color3.fromRGB(100, 150, 255),
-        SLIDER_BG = Color3.fromRGB(40, 40, 40),
-        SLIDER_FILL = Color3.fromRGB(100, 150, 255),
-        ACTIVE_TAB = Color3.fromRGB(100, 150, 255),
-        TEXT_DEFAULT = Color3.new(1, 1, 1),
-        TEXT_INACTIVE = Color3.fromRGB(150, 150, 150),
-        HEADER = Color3.fromRGB(180, 180, 180),
-        SCROLLBAR_BG = Color3.fromRGB(30, 30, 30),
-        SCROLLBAR_THUMB = Color3.fromRGB(100, 150, 255),
-        BUTTON_BG = Color3.fromRGB(50, 50, 50),
-        DROPDOWN_BG = Color3.fromRGB(20, 20, 20),
-        CHECKBOX_OFF = Color3.fromRGB(60, 60, 60),
-        CHECKBOX_ON = Color3.fromRGB(100, 150, 255)
+        SURFACE = Color3.fromRGB(38, 38, 38),
+        BORDER = Color3.fromRGB(25, 25, 25),
+        CRUST = Color3.fromRGB(0, 0, 0),
+        OVERLAY = Color3.fromRGB(76, 76, 76),
+        ACCENT = Color3.fromRGB(255, 127, 0),
+        TEXT = Color3.fromRGB(255, 255, 255),
+        SHADOW = Color3.fromRGB(0, 0, 0)
     },
     
     OPACITY = {
-        LEFT = 0.6,
-        RIGHT = 0.92,
-        NICK_BLOCK = 0.92,
-        BLOCK = 0.85,
-        SCROLLBAR = 0.95,
-        DROPDOWN = 0.98
+        BASE = 1.0,
+        SHADOW = 0.3
     },
     
     LAYOUT = {
-        LINE_SPACING = 40,
-        TEXT_OFFSET_X = 50,
-        NICK_HEIGHT = 50,
-        AVATAR_SIZE = 30,
-        BLOCK_PADDING = 15,
-        BLOCK_SPACING = 15,
-        OPTION_HEIGHT = 30,
-        OPTION_SPACING = 8,
-        TOGGLE_WIDTH = 40,
-        TOGGLE_HEIGHT = 20,
-        TOGGLE_CIRCLE_RADIUS = 8,
-        SLIDER_HEIGHT = 6,
-        SLIDER_CIRCLE_RADIUS = 10,
-        SCROLLBAR_WIDTH = 10,
-        BUTTON_HEIGHT = 25,
-        DROPDOWN_ITEM_HEIGHT = 25
+        PADDING = 6,
+        SECTION_SPACING = 8,
+        ITEM_HEIGHT = 14,
+        ITEM_SPACING = 8,
+        SLIDER_HEIGHT = 20,
+        CHOICE_HEIGHT = 20
     },
     
-    TEXT_SIZE = {
-        TITLE = 27,
-        HEADER = 13,
-        BUTTON = 16,
-        BLOCK_TITLE = 16,
-        OPTION = 12,
-        NICK = 18
-    },
+    TEXT_SIZE = 13,
     
     ZINDEX = {
         BASE = 100,
         PANEL = 100,
-        BLOCK = 200,
+        SECTION = 200,
         COMPONENT = 300,
-        SCROLLBAR = 400,
         DROPDOWN = 500
     }
 }
@@ -108,11 +76,6 @@ local function PointInRect(px, py, rx, ry, rw, rh)
     return px >= rx and py >= ry and px <= rx + rw and py <= ry + rh
 end
 
-local function PointInCircle(px, py, cx, cy, radius)
-    local dx, dy = px - cx, py - cy
-    return (dx * dx + dy * dy) <= (radius * radius)
-end
-
 local function Clamp(value, min, max)
     return math.max(min, math.min(max, value))
 end
@@ -121,131 +84,8 @@ local function Lerp(a, b, t)
     return a + (b - a) * t
 end
 
-local function LoadAvatar()
-    local avatarUrl
-    local fileName = "avatar_" .. Player.UserId .. ".txt"
-    
-    if isfile and readfile and isfile(fileName) then
-        local content = readfile(fileName)
-        if content and content ~= "" then
-            avatarUrl = content
-        end
-    end
-    
-    if not avatarUrl then
-        local apiUrl = "https://thumbnails.roblox.com/v1/users/avatar-headshot?userIds="..Player.UserId.."&size=100x100&format=Png"
-        local success, response = pcall(game.HttpGet, game, apiUrl)
-        if success and response then
-            avatarUrl = response:match("(https://tr%.rbxcdn%.com/.-noFilter)")
-            if avatarUrl and writefile then
-                pcall(writefile, fileName, avatarUrl)
-            end
-        end
-    end
-    
-    if avatarUrl then
-        local resizedUrl = avatarUrl:gsub("/100/100/", "/"..CONFIG.LAYOUT.AVATAR_SIZE.."/"..CONFIG.LAYOUT.AVATAR_SIZE.."/")
-        local avatarImage = CreateDrawing("Image", {
-            Url = resizedUrl,
-            Size = Vector2.new(CONFIG.LAYOUT.AVATAR_SIZE, CONFIG.LAYOUT.AVATAR_SIZE),
-            ZIndex = CONFIG.ZINDEX.PANEL + 3,
-            Rounding = 15
-        })
-        return avatarImage
-    end
-    
-    return nil
-end
-
-local ScrollManager = {
-    offset = 0,
-    maxOffset = 0,
-    draggingThumb = false,
-    dragStartY = 0,
-    dragStartOffset = 0
-}
-
-function ScrollManager:Init()
-    self.scrollbarBg = CreateDrawing("Square", {
-        Filled = true,
-        Color = CONFIG.COLORS.SCROLLBAR_BG,
-        Transparency = CONFIG.OPACITY.SCROLLBAR,
-        Rounding = 5,
-        ZIndex = CONFIG.ZINDEX.SCROLLBAR
-    })
-    
-    self.scrollbarThumb = CreateDrawing("Square", {
-        Filled = true,
-        Color = CONFIG.COLORS.SCROLLBAR_THUMB,
-        Transparency = CONFIG.OPACITY.SCROLLBAR,
-        Rounding = 5,
-        ZIndex = CONFIG.ZINDEX.SCROLLBAR + 1
-    })
-end
-
-function ScrollManager:UpdateMaxOffset(contentHeight, viewHeight)
-    self.maxOffset = math.max(0, contentHeight - viewHeight)
-    self.offset = Clamp(self.offset, 0, self.maxOffset)
-end
-
-function ScrollManager:Update()
-    local rightX = Panel.x + CONFIG.GUI.LEFT_WIDTH
-    local rightY = Panel.y
-    local rightWidth = CONFIG.GUI.WIDTH - CONFIG.GUI.LEFT_WIDTH
-    local rightHeight = CONFIG.GUI.HEIGHT
-    
-    if self.maxOffset > 10 then
-        self.scrollbarBg.Position = Vector2.new(rightX + rightWidth - CONFIG.LAYOUT.SCROLLBAR_WIDTH - 8, rightY + 8)
-        self.scrollbarBg.Size = Vector2.new(CONFIG.LAYOUT.SCROLLBAR_WIDTH, rightHeight - 16)
-        self.scrollbarBg.Visible = GUI_Visible and GUI_Initialized
-        
-        local thumbHeight = math.max(40, (rightHeight - 16) * (rightHeight / (rightHeight + self.maxOffset)))
-        local scrollableHeight = rightHeight - 16 - thumbHeight
-        local thumbY = rightY + 8 + (scrollableHeight * (self.offset / self.maxOffset))
-        
-        self.scrollbarThumb.Position = Vector2.new(rightX + rightWidth - CONFIG.LAYOUT.SCROLLBAR_WIDTH - 8, thumbY)
-        self.scrollbarThumb.Size = Vector2.new(CONFIG.LAYOUT.SCROLLBAR_WIDTH, thumbHeight)
-        self.scrollbarThumb.Visible = GUI_Visible and GUI_Initialized
-    else
-        self.scrollbarBg.Visible = false
-        self.scrollbarThumb.Visible = false
-    end
-end
-
-function ScrollManager:HandleThumbDrag(mx, my)
-    if self.draggingThumb then
-        local rightY = Panel.y
-        local rightHeight = CONFIG.GUI.HEIGHT
-        local thumbHeight = math.max(40, (rightHeight - 16) * (rightHeight / (rightHeight + self.maxOffset)))
-        
-        local deltaY = my - self.dragStartY
-        local scrollRange = rightHeight - 16 - thumbHeight
-        if scrollRange > 0 then
-            local scrollDelta = (deltaY / scrollRange) * self.maxOffset
-            self.offset = Clamp(self.dragStartOffset + scrollDelta, 0, self.maxOffset)
-        end
-        return true
-    end
-    return false
-end
-
-function ScrollManager:StartThumbDrag(mx, my)
-    if self.maxOffset <= 10 then return false end
-    
-    local pos = self.scrollbarThumb.Position
-    local size = self.scrollbarThumb.Size
-    
-    if PointInRect(mx, my, pos.X, pos.Y, size.X, size.Y) then
-        self.draggingThumb = true
-        self.dragStartY = my
-        self.dragStartOffset = self.offset
-        return true
-    end
-    return false
-end
-
-function ScrollManager:StopThumbDrag()
-    self.draggingThumb = false
+local function GetTextBounds(str)
+    return #str * CONFIG.TEXT_SIZE, CONFIG.TEXT_SIZE
 end
 
 local Toggle = {}
@@ -254,28 +94,33 @@ Toggle.__index = Toggle
 function Toggle.new(option, accentColor)
     local self = setmetatable({}, Toggle)
     self.option = option
-    self.accentColor = accentColor or CONFIG.COLORS.TOGGLE_ON
+    self.accentColor = accentColor or CONFIG.COLORS.ACCENT
     
-    self.bg = CreateDrawing("Square", {
-        Filled = true,
-        Color = CONFIG.COLORS.TOGGLE_OFF,
-        Transparency = 0.8,
-        Rounding = 10,
+    self.outline = CreateDrawing("Square", {
+        Filled = false,
+        Thickness = 1,
+        Color = CONFIG.COLORS.CRUST,
         ZIndex = CONFIG.ZINDEX.COMPONENT
     })
     
-    self.circle = CreateDrawing("Circle", {
+    self.check = CreateDrawing("Square", {
         Filled = true,
-        Color = Color3.new(1, 1, 1),
-        Radius = CONFIG.LAYOUT.TOGGLE_CIRCLE_RADIUS,
+        Color = self.accentColor,
         ZIndex = CONFIG.ZINDEX.COMPONENT + 1
+    })
+    
+    self.checkShadow = CreateDrawing("Square", {
+        Filled = true,
+        Color = CONFIG.COLORS.SHADOW,
+        ZIndex = CONFIG.ZINDEX.COMPONENT
     })
     
     self.label = CreateDrawing("Text", {
         Text = option.Name,
-        Size = CONFIG.TEXT_SIZE.OPTION,
+        Size = CONFIG.TEXT_SIZE,
         Center = false,
-        Color = CONFIG.COLORS.TEXT_INACTIVE,
+        Outline = true,
+        Color = CONFIG.COLORS.TEXT,
         ZIndex = CONFIG.ZINDEX.COMPONENT
     })
     
@@ -283,25 +128,27 @@ function Toggle.new(option, accentColor)
 end
 
 function Toggle:Update(x, y)
-    self.label.Position = Vector2.new(x, y)
+    local boxSize = Vector2.new(CONFIG.LAYOUT.ITEM_HEIGHT, CONFIG.LAYOUT.ITEM_HEIGHT)
     
-    local toggleX = x + 175
-    self.bg.Position = Vector2.new(toggleX, y - 2)
-    self.bg.Size = Vector2.new(CONFIG.LAYOUT.TOGGLE_WIDTH, CONFIG.LAYOUT.TOGGLE_HEIGHT)
+    self.outline.Position = Vector2.new(x, y)
+    self.outline.Size = boxSize
     
-    local circleX = self.option.Value and 
-        (toggleX + CONFIG.LAYOUT.TOGGLE_WIDTH - CONFIG.LAYOUT.TOGGLE_CIRCLE_RADIUS - 2) or 
-        (toggleX + CONFIG.LAYOUT.TOGGLE_CIRCLE_RADIUS + 2)
+    self.check.Position = Vector2.new(x + 1, y + 1)
+    self.check.Size = Vector2.new(boxSize.X - 2, boxSize.Y - 2)
+    self.check.Visible = self.option.Value and GUI_Visible and GUI_Initialized
     
-    self.circle.Position = Vector2.new(circleX, y + CONFIG.LAYOUT.TOGGLE_HEIGHT / 2 - 2)
-    self.bg.Color = self.option.Value and self.accentColor or CONFIG.COLORS.TOGGLE_OFF
-    self.label.Color = self.option.Value and CONFIG.COLORS.TEXT_DEFAULT or CONFIG.COLORS.TEXT_INACTIVE
+    self.checkShadow.Position = Vector2.new(x + 1, y + boxSize.Y - 2)
+    self.checkShadow.Size = Vector2.new(boxSize.X - 2, 1)
+    self.checkShadow.Transparency = CONFIG.OPACITY.SHADOW
+    self.checkShadow.Visible = self.option.Value and GUI_Visible and GUI_Initialized
+    
+    self.label.Position = Vector2.new(x + boxSize.X + 8, y)
 end
 
 function Toggle:HandleClick(mx, my)
-    if not self.bg.Visible then return false end
-    local pos = self.bg.Position
-    local size = self.bg.Size
+    if not self.outline.Visible then return false end
+    local pos = self.outline.Position
+    local size = self.outline.Size
     if PointInRect(mx, my, pos.X, pos.Y, size.X, size.Y) then
         self.option.Value = not self.option.Value
         if self.option.Callback then
@@ -313,8 +160,9 @@ function Toggle:HandleClick(mx, my)
 end
 
 function Toggle:SetVisible(visible)
-    self.bg.Visible = visible and GUI_Visible and GUI_Initialized
-    self.circle.Visible = visible and GUI_Visible and GUI_Initialized
+    self.outline.Visible = visible and GUI_Visible and GUI_Initialized
+    self.check.Visible = visible and self.option.Value and GUI_Visible and GUI_Initialized
+    self.checkShadow.Visible = visible and self.option.Value and GUI_Visible and GUI_Initialized
     self.label.Visible = visible and GUI_Visible and GUI_Initialized
 end
 
@@ -325,75 +173,79 @@ function Slider.new(option, accentColor)
     local self = setmetatable({}, Slider)
     self.option = option
     self.dragging = false
-    self.accentColor = accentColor or CONFIG.COLORS.SLIDER_FILL
+    self.accentColor = accentColor or CONFIG.COLORS.ACCENT
     
-    self.bg = CreateDrawing("Square", {
+    self.outline = CreateDrawing("Square", {
         Filled = true,
-        Color = CONFIG.COLORS.SLIDER_BG,
-        Transparency = 0.8,
-        Rounding = 3,
+        Color = CONFIG.COLORS.CRUST,
         ZIndex = CONFIG.ZINDEX.COMPONENT
     })
     
     self.fill = CreateDrawing("Square", {
         Filled = true,
         Color = self.accentColor,
-        Transparency = 0.8,
-        Rounding = 3,
         ZIndex = CONFIG.ZINDEX.COMPONENT + 1
     })
     
-    self.circle = CreateDrawing("Circle", {
+    self.fillShadow = CreateDrawing("Square", {
         Filled = true,
-        Color = Color3.new(1, 1, 1),
-        Radius = CONFIG.LAYOUT.SLIDER_CIRCLE_RADIUS,
-        ZIndex = CONFIG.ZINDEX.COMPONENT + 2
+        Color = CONFIG.COLORS.SHADOW,
+        ZIndex = CONFIG.ZINDEX.COMPONENT
     })
     
     self.label = CreateDrawing("Text", {
         Text = option.Name,
-        Size = CONFIG.TEXT_SIZE.OPTION,
+        Size = CONFIG.TEXT_SIZE,
         Center = false,
-        Color = CONFIG.COLORS.TEXT_DEFAULT,
+        Outline = true,
+        Color = CONFIG.COLORS.TEXT,
         ZIndex = CONFIG.ZINDEX.COMPONENT
     })
     
     self.valueText = CreateDrawing("Text", {
         Text = tostring(option.Value),
-        Size = CONFIG.TEXT_SIZE.OPTION,
+        Size = CONFIG.TEXT_SIZE,
         Center = false,
-        Color = CONFIG.COLORS.TEXT_DEFAULT,
+        Outline = true,
+        Color = CONFIG.COLORS.TEXT,
         ZIndex = CONFIG.ZINDEX.COMPONENT
     })
     
     return self
 end
 
-function Slider:Update(x, y)
+function Slider:Update(x, y, width)
+    local labelW, labelH = GetTextBounds(self.option.Name)
     self.label.Position = Vector2.new(x, y)
     
-    local sliderX = x + 75
-    local sliderWidth = 100
-    self.bg.Position = Vector2.new(sliderX, y + 5)
-    self.bg.Size = Vector2.new(sliderWidth, CONFIG.LAYOUT.SLIDER_HEIGHT)
+    local sliderY = y + labelH + 10
+    local sliderH = CONFIG.LAYOUT.SLIDER_HEIGHT
+    
+    self.outline.Position = Vector2.new(x, sliderY)
+    self.outline.Size = Vector2.new(width, sliderH)
     
     local percent = (self.option.Value - self.option.Min) / (self.option.Max - self.option.Min)
-    local fillWidth = sliderWidth * percent
+    local fillWidth = math.max((width - 2) * percent, 0)
     
-    self.fill.Position = Vector2.new(sliderX, y + 5)
-    self.fill.Size = Vector2.new(fillWidth, CONFIG.LAYOUT.SLIDER_HEIGHT)
+    self.fill.Position = Vector2.new(x + 1, sliderY + 1)
+    self.fill.Size = Vector2.new(fillWidth, sliderH - 2)
+    self.fill.Visible = self.option.Value ~= self.option.Min and GUI_Visible and GUI_Initialized
     
-    local circleX = sliderX + fillWidth
-    self.circle.Position = Vector2.new(circleX, y + 8)
+    self.fillShadow.Position = Vector2.new(x + 1, sliderY + sliderH - 3)
+    self.fillShadow.Size = Vector2.new(fillWidth, 2)
+    self.fillShadow.Transparency = 0.15
+    self.fillShadow.Visible = self.option.Value ~= self.option.Min and GUI_Visible and GUI_Initialized
     
-    self.valueText.Text = tostring(math.floor(self.option.Value))
-    self.valueText.Position = Vector2.new(sliderX + sliderWidth + 10, y)
+    local displayValue = tostring(math.floor(self.option.Value))
+    local valueW = GetTextBounds(displayValue)
+    self.valueText.Text = displayValue
+    self.valueText.Position = Vector2.new(x + width - valueW - 6, sliderY + 4)
 end
 
 function Slider:HandleDrag(mx, my)
     if self.dragging then
-        local pos = self.bg.Position
-        local size = self.bg.Size
+        local pos = self.outline.Position
+        local size = self.outline.Size
         local percent = Clamp((mx - pos.X) / size.X, 0, 1)
         self.option.Value = Lerp(self.option.Min, self.option.Max, percent)
         if self.option.Callback then
@@ -405,11 +257,10 @@ function Slider:HandleDrag(mx, my)
 end
 
 function Slider:StartDrag(mx, my)
-    if not self.bg.Visible then return false end
-    local pos = self.bg.Position
-    local size = self.bg.Size
-    if PointInRect(mx, my, pos.X, pos.Y - 5, size.X, size.Y + 10) or
-       PointInCircle(mx, my, self.circle.Position.X, self.circle.Position.Y, CONFIG.LAYOUT.SLIDER_CIRCLE_RADIUS) then
+    if not self.outline.Visible then return false end
+    local pos = self.outline.Position
+    local size = self.outline.Size
+    if PointInRect(mx, my, pos.X, pos.Y, size.X, size.Y) then
         self.dragging = true
         return true
     end
@@ -421,9 +272,9 @@ function Slider:StopDrag()
 end
 
 function Slider:SetVisible(visible)
-    self.bg.Visible = visible and GUI_Visible and GUI_Initialized
-    self.fill.Visible = visible and GUI_Visible and GUI_Initialized
-    self.circle.Visible = visible and GUI_Visible and GUI_Initialized
+    self.outline.Visible = visible and GUI_Visible and GUI_Initialized
+    self.fill.Visible = visible and self.option.Value ~= self.option.Min and GUI_Visible and GUI_Initialized
+    self.fillShadow.Visible = visible and self.option.Value ~= self.option.Min and GUI_Visible and GUI_Initialized
     self.label.Visible = visible and GUI_Visible and GUI_Initialized
     self.valueText.Visible = visible and GUI_Visible and GUI_Initialized
 end
@@ -434,71 +285,83 @@ MultiSelect.__index = MultiSelect
 function MultiSelect.new(option, accentColor)
     local self = setmetatable({}, MultiSelect)
     self.option = option
-    self.accentColor = accentColor or CONFIG.COLORS.CHECKBOX_ON
+    self.accentColor = accentColor or CONFIG.COLORS.ACCENT
     self.isOpen = false
     self.dropdownElements = {}
     
     self.label = CreateDrawing("Text", {
         Text = option.Name,
-        Size = CONFIG.TEXT_SIZE.OPTION,
+        Size = CONFIG.TEXT_SIZE,
         Center = false,
-        Color = CONFIG.COLORS.TEXT_DEFAULT,
+        Outline = true,
+        Color = CONFIG.COLORS.TEXT,
         ZIndex = CONFIG.ZINDEX.COMPONENT
     })
     
-    self.button = CreateDrawing("Square", {
+    self.outline = CreateDrawing("Square", {
+        Filled = false,
+        Thickness = 1,
+        Color = CONFIG.COLORS.CRUST,
+        ZIndex = CONFIG.ZINDEX.COMPONENT
+    })
+    
+    self.fill = CreateDrawing("Square", {
         Filled = true,
-        Color = CONFIG.COLORS.BUTTON_BG,
-        Transparency = 0.8,
-        Rounding = 3,
+        Color = CONFIG.COLORS.CRUST,
         ZIndex = CONFIG.ZINDEX.COMPONENT
     })
     
-    self.buttonText = CreateDrawing("Text", {
-        Text = "Select...",
-        Size = CONFIG.TEXT_SIZE.OPTION,
+    self.valueText = CreateDrawing("Text", {
+        Text = "...",
+        Size = CONFIG.TEXT_SIZE,
         Center = false,
-        Color = CONFIG.COLORS.TEXT_DEFAULT,
+        Outline = true,
+        Color = CONFIG.COLORS.TEXT,
         ZIndex = CONFIG.ZINDEX.COMPONENT + 1
     })
     
-    self.dropdownBg = CreateDrawing("Square", {
+    self.expandText = CreateDrawing("Text", {
+        Text = "<",
+        Size = CONFIG.TEXT_SIZE,
+        Center = false,
+        Outline = true,
+        Color = CONFIG.COLORS.TEXT,
+        ZIndex = CONFIG.ZINDEX.COMPONENT + 1
+    })
+    
+    -- Dropdown background
+    self.dropdownBase = CreateDrawing("Square", {
         Filled = true,
-        Color = CONFIG.COLORS.DROPDOWN_BG,
-        Transparency = CONFIG.OPACITY.DROPDOWN,
-        Rounding = 3,
+        Color = CONFIG.COLORS.SURFACE,
+        ZIndex = CONFIG.ZINDEX.DROPDOWN
+    })
+    
+    self.dropdownCrust = CreateDrawing("Square", {
+        Filled = false,
+        Thickness = 1,
+        Color = CONFIG.COLORS.CRUST,
+        ZIndex = CONFIG.ZINDEX.DROPDOWN
+    })
+    
+    self.dropdownBorder = CreateDrawing("Square", {
+        Filled = false,
+        Thickness = 1,
+        Color = CONFIG.COLORS.BORDER,
         ZIndex = CONFIG.ZINDEX.DROPDOWN
     })
     
     for _, itemName in ipairs(option.Options) do
-        local checkbox = CreateDrawing("Square", {
-            Filled = true,
-            Color = CONFIG.COLORS.CHECKBOX_OFF,
-            Transparency = 0.8,
-            Rounding = 2,
-            ZIndex = CONFIG.ZINDEX.DROPDOWN + 1
-        })
-        
-        local checkmark = CreateDrawing("Text", {
-            Text = "✓",
-            Size = 14,
-            Center = false,
-            Color = Color3.new(1, 1, 1),
-            ZIndex = CONFIG.ZINDEX.DROPDOWN + 2
-        })
-        
         local itemText = CreateDrawing("Text", {
             Text = itemName,
-            Size = CONFIG.TEXT_SIZE.OPTION,
+            Size = CONFIG.TEXT_SIZE,
             Center = false,
-            Color = CONFIG.COLORS.TEXT_DEFAULT,
+            Outline = true,
+            Color = CONFIG.COLORS.TEXT,
             ZIndex = CONFIG.ZINDEX.DROPDOWN + 1
         })
         
         table.insert(self.dropdownElements, {
             name = itemName,
-            checkbox = checkbox,
-            checkmark = checkmark,
             text = itemText,
             selected = false
         })
@@ -507,57 +370,83 @@ function MultiSelect.new(option, accentColor)
     return self
 end
 
-function MultiSelect:Update(x, y)
+function MultiSelect:Update(x, y, width)
+    local labelW, labelH = GetTextBounds(self.option.Name)
     self.label.Position = Vector2.new(x, y)
     
-    local buttonX = x + 100
-    local buttonWidth = 115
-    self.button.Position = Vector2.new(buttonX, y - 2)
-    self.button.Size = Vector2.new(buttonWidth, CONFIG.LAYOUT.BUTTON_HEIGHT)
+    local boxY = y + labelH + 10
+    local boxH = CONFIG.LAYOUT.CHOICE_HEIGHT
+    
+    self.outline.Position = Vector2.new(x, boxY)
+    self.outline.Size = Vector2.new(width, boxH)
+    
+    self.fill.Position = Vector2.new(x + 2, boxY + 2)
+    self.fill.Size = Vector2.new(width - 4, boxH - 4)
     
     local selectedCount = 0
     for _, elem in ipairs(self.dropdownElements) do
         if elem.selected then selectedCount = selectedCount + 1 end
     end
     
-    self.buttonText.Text = selectedCount > 0 and ("Selected: " .. selectedCount) or "Select..."
-    self.buttonText.Position = Vector2.new(buttonX + 5, y + 3)
+    local valueStr = selectedCount > 0 and table.concat(self:GetSelectedNames(), ", ") or "..."
+    local valueW = GetTextBounds(valueStr)
+    if valueW > width - 32 then
+        valueStr = "..."
+    end
+    self.valueText.Text = valueStr
+    self.valueText.Position = Vector2.new(x + 4, boxY + 4)
+    
+    local expandW = GetTextBounds("<")
+    self.expandText.Position = Vector2.new(x + width - expandW - 4, boxY + 4)
     
     if self.isOpen then
-        local dropdownHeight = #self.dropdownElements * CONFIG.LAYOUT.DROPDOWN_ITEM_HEIGHT + 10
-        self.dropdownBg.Position = Vector2.new(buttonX, y + CONFIG.LAYOUT.BUTTON_HEIGHT + 2)
-        self.dropdownBg.Size = Vector2.new(buttonWidth, dropdownHeight)
-        self.dropdownBg.Visible = GUI_Visible and GUI_Initialized
+        local dropdownY = boxY + boxH
+        local itemCount = #self.dropdownElements
+        local dropdownH = itemCount * (CONFIG.TEXT_SIZE * 2 + CONFIG.LAYOUT.PADDING) + CONFIG.LAYOUT.PADDING
+        
+        self.dropdownBase.Position = Vector2.new(x, dropdownY)
+        self.dropdownBase.Size = Vector2.new(width, dropdownH)
+        self.dropdownBase.Visible = GUI_Visible and GUI_Initialized
+        
+        self.dropdownCrust.Position = Vector2.new(x, dropdownY)
+        self.dropdownCrust.Size = Vector2.new(width, dropdownH)
+        self.dropdownCrust.Visible = GUI_Visible and GUI_Initialized
+        
+        self.dropdownBorder.Position = Vector2.new(x + 1, dropdownY + 1)
+        self.dropdownBorder.Size = Vector2.new(width - 2, dropdownH - 2)
+        self.dropdownBorder.Visible = GUI_Visible and GUI_Initialized
         
         for i, elem in ipairs(self.dropdownElements) do
-            local itemY = y + CONFIG.LAYOUT.BUTTON_HEIGHT + 5 + (i - 1) * CONFIG.LAYOUT.DROPDOWN_ITEM_HEIGHT
-            
-            elem.checkbox.Position = Vector2.new(buttonX + 5, itemY + 3)
-            elem.checkbox.Size = Vector2.new(16, 16)
-            elem.checkbox.Color = elem.selected and self.accentColor or CONFIG.COLORS.CHECKBOX_OFF
-            elem.checkbox.Visible = GUI_Visible and GUI_Initialized
-            
-            elem.checkmark.Position = Vector2.new(buttonX + 7, itemY + 2)
-            elem.checkmark.Visible = GUI_Visible and GUI_Initialized and elem.selected
-            
-            elem.text.Position = Vector2.new(buttonX + 28, itemY + 5)
+            local itemY = dropdownY + CONFIG.LAYOUT.PADDING + (i - 1) * (CONFIG.TEXT_SIZE * 2 + CONFIG.LAYOUT.PADDING)
+            elem.text.Position = Vector2.new(x + CONFIG.LAYOUT.PADDING, itemY)
+            elem.text.Color = elem.selected and self.accentColor or CONFIG.COLORS.TEXT
             elem.text.Visible = GUI_Visible and GUI_Initialized
         end
     else
-        self.dropdownBg.Visible = false
+        self.dropdownBase.Visible = false
+        self.dropdownCrust.Visible = false
+        self.dropdownBorder.Visible = false
         for _, elem in ipairs(self.dropdownElements) do
-            elem.checkbox.Visible = false
-            elem.checkmark.Visible = false
             elem.text.Visible = false
         end
     end
 end
 
+function MultiSelect:GetSelectedNames()
+    local selected = {}
+    for _, elem in ipairs(self.dropdownElements) do
+        if elem.selected then
+            table.insert(selected, elem.name)
+        end
+    end
+    return selected
+end
+
 function MultiSelect:HandleClick(mx, my)
-    if not self.button.Visible then return false end
+    if not self.outline.Visible then return false end
     
-    local pos = self.button.Position
-    local size = self.button.Size
+    local pos = self.outline.Position
+    local size = self.outline.Size
     
     if PointInRect(mx, my, pos.X, pos.Y, size.X, size.Y) then
         self.isOpen = not self.isOpen
@@ -569,32 +458,18 @@ function MultiSelect:HandleClick(mx, my)
     end
     
     if self.isOpen then
-        local dropdownPos = self.dropdownBg.Position
-        local dropdownSize = self.dropdownBg.Size
+        local dropdownPos = self.dropdownBase.Position
+        local dropdownSize = self.dropdownBase.Size
         
         if PointInRect(mx, my, dropdownPos.X, dropdownPos.Y, dropdownSize.X, dropdownSize.Y) then
             for i, elem in ipairs(self.dropdownElements) do
-                local itemY = dropdownPos.Y + 5 + (i - 1) * CONFIG.LAYOUT.DROPDOWN_ITEM_HEIGHT
-                if PointInRect(mx, my, dropdownPos.X, itemY, dropdownSize.X, CONFIG.LAYOUT.DROPDOWN_ITEM_HEIGHT) then
+                local itemY = dropdownPos.Y + CONFIG.LAYOUT.PADDING + (i - 1) * (CONFIG.TEXT_SIZE * 2 + CONFIG.LAYOUT.PADDING)
+                local itemH = CONFIG.TEXT_SIZE * 2 + CONFIG.LAYOUT.PADDING
+                if PointInRect(mx, my, dropdownPos.X, itemY, dropdownSize.X, itemH) then
                     elem.selected = not elem.selected
                     
-                    if not self.option.Values then
-                        self.option.Values = {}
-                    end
-                    
-                    if elem.selected then
-                        table.insert(self.option.Values, elem.name)
-                    else
-                        for j, v in ipairs(self.option.Values) do
-                            if v == elem.name then
-                                table.remove(self.option.Values, j)
-                                break
-                            end
-                        end
-                    end
-                    
                     if self.option.Callback then
-                        self.option.Callback(self.option.Values)
+                        self.option.Callback(self:GetSelectedNames())
                     end
                     return true
                 end
@@ -610,13 +485,15 @@ end
 
 function MultiSelect:SetVisible(visible)
     self.label.Visible = visible and GUI_Visible and GUI_Initialized
-    self.button.Visible = visible and GUI_Visible and GUI_Initialized
-    self.buttonText.Visible = visible and GUI_Visible and GUI_Initialized
+    self.outline.Visible = visible and GUI_Visible and GUI_Initialized
+    self.fill.Visible = visible and GUI_Visible and GUI_Initialized
+    self.valueText.Visible = visible and GUI_Visible and GUI_Initialized
+    self.expandText.Visible = visible and GUI_Visible and GUI_Initialized
     if not visible then
-        self.dropdownBg.Visible = false
+        self.dropdownBase.Visible = false
+        self.dropdownCrust.Visible = false
+        self.dropdownBorder.Visible = false
         for _, elem in ipairs(self.dropdownElements) do
-            elem.checkbox.Visible = false
-            elem.checkmark.Visible = false
             elem.text.Visible = false
         end
     end
@@ -630,20 +507,33 @@ function Section.new(data, accentColor)
     self.data = data
     self.accentColor = accentColor
     
-    self.title = CreateDrawing("Text", {
-        Text = data.Name,
-        Size = CONFIG.TEXT_SIZE.BLOCK_TITLE,
-        Center = false,
-        Color = CONFIG.COLORS.TEXT_DEFAULT,
-        ZIndex = CONFIG.ZINDEX.BLOCK + 1
+    self.base = CreateDrawing("Square", {
+        Filled = true,
+        Color = CONFIG.COLORS.SURFACE,
+        ZIndex = CONFIG.ZINDEX.SECTION
     })
     
-    self.bg = CreateDrawing("Square", {
-        Filled = true,
-        Color = CONFIG.COLORS.BLOCK_BG,
-        Transparency = CONFIG.OPACITY.BLOCK,
-        Rounding = 5,
-        ZIndex = CONFIG.ZINDEX.BLOCK
+    self.crust = CreateDrawing("Square", {
+        Filled = false,
+        Thickness = 1,
+        Color = CONFIG.COLORS.CRUST,
+        ZIndex = CONFIG.ZINDEX.SECTION
+    })
+    
+    self.border = CreateDrawing("Square", {
+        Filled = false,
+        Thickness = 1,
+        Color = CONFIG.COLORS.OVERLAY,
+        ZIndex = CONFIG.ZINDEX.SECTION
+    })
+    
+    self.title = CreateDrawing("Text", {
+        Text = data.Name,
+        Size = CONFIG.TEXT_SIZE,
+        Center = false,
+        Outline = true,
+        Color = CONFIG.COLORS.TEXT,
+        ZIndex = CONFIG.ZINDEX.SECTION + 1
     })
     
     self.components = {}
@@ -703,7 +593,6 @@ function Section:MultiSelect(options)
     local option = {
         Name = options.Name or "Multi Select",
         Options = options.Options or {},
-        Values = {},
         Callback = options.Callback
     }
     
@@ -712,92 +601,68 @@ function Section:MultiSelect(options)
     
     return {
         GetSelected = function()
-            return option.Values
-        end,
-        SetSelected = function(values)
-            option.Values = values or {}
-            for _, elem in ipairs(multiselect.dropdownElements) do
-                elem.selected = false
-                for _, v in ipairs(option.Values) do
-                    if elem.name == v then
-                        elem.selected = true
-                        break
-                    end
-                end
-            end
-            if option.Callback then
-                option.Callback(option.Values)
-            end
+            return multiselect:GetSelectedNames()
         end
     }
 end
 
-function Section:CalculateHeight()
-    local height = CONFIG.LAYOUT.BLOCK_PADDING * 2 + CONFIG.TEXT_SIZE.BLOCK_TITLE + 10
+function Section:CalculateHeight(width)
+    local height = CONFIG.LAYOUT.PADDING * 2 + CONFIG.TEXT_SIZE
     for _, component in ipairs(self.components) do
-        height = height + CONFIG.LAYOUT.OPTION_HEIGHT + CONFIG.LAYOUT.OPTION_SPACING
+        if component.option.Name then
+            local _, labelH = GetTextBounds(component.option.Name)
+            height = height + labelH + 10
+        end
+        if component.outline then
+            height = height + component.outline.Size.Y
+        end
+        height = height + CONFIG.LAYOUT.ITEM_SPACING
     end
     return height
 end
 
-function Section:UpdateBlock(x, y, width)
-    self.bg.Position = Vector2.new(x, y)
-    local height = self:CalculateHeight()
-    self.bg.Size = Vector2.new(width, height)
+function Section:UpdateSection(x, y, width)
+    local itemY = y + CONFIG.LAYOUT.PADDING + CONFIG.TEXT_SIZE + 5
+    local contentWidth = width - CONFIG.LAYOUT.PADDING * 2
     
-    self.title.Position = Vector2.new(x + CONFIG.LAYOUT.BLOCK_PADDING, y + CONFIG.LAYOUT.BLOCK_PADDING)
-    
-    local optionY = y + CONFIG.LAYOUT.BLOCK_PADDING + CONFIG.TEXT_SIZE.BLOCK_TITLE + 15
     for _, component in ipairs(self.components) do
-        component:Update(x + CONFIG.LAYOUT.BLOCK_PADDING, optionY)
-        optionY = optionY + CONFIG.LAYOUT.OPTION_HEIGHT + CONFIG.LAYOUT.OPTION_SPACING
+        component:Update(x + CONFIG.LAYOUT.PADDING, itemY, contentWidth)
+        
+        if component.option.Name then
+            local _, labelH = GetTextBounds(component.option.Name)
+            itemY = itemY + labelH + 10
+        end
+        if component.outline then
+            itemY = itemY + component.outline.Size.Y
+        end
+        itemY = itemY + CONFIG.LAYOUT.ITEM_SPACING
     end
+    
+    local height = self:CalculateHeight(width)
+    
+    self.base.Position = Vector2.new(x, y)
+    self.base.Size = Vector2.new(width, height)
+    
+    self.crust.Position = Vector2.new(x, y)
+    self.crust.Size = Vector2.new(width, height)
+    
+    self.border.Position = Vector2.new(x + 1, y + 1)
+    self.border.Size = Vector2.new(width - 2, height - 2)
+    
+    local titleW, titleH = GetTextBounds(self.data.Name)
+    self.title.Position = Vector2.new(x + 10, y - titleH / 2)
     
     return height
 end
 
-function Section:SetVisible(visible, clipY, clipHeight)
-    if not visible or not GUI_Initialized then
-        self.bg.Visible = false
-        self.title.Visible = false
-        for _, component in ipairs(self.components) do
-            component:SetVisible(false)
-        end
-        return
-    end
-    
-    local blockY = self.bg.Position.Y
-    local blockHeight = self.bg.Size.Y
-    local blockBottom = blockY + blockHeight
-    local clipBottom = clipY + clipHeight
-    
-    if blockBottom < clipY or blockY > clipBottom then
-        self.bg.Visible = false
-        self.title.Visible = false
-        for _, component in ipairs(self.components) do
-            component:SetVisible(false)
-        end
-        return
-    end
-    
-    self.bg.Visible = GUI_Visible and GUI_Initialized
-    
-    local visibleTop = math.max(blockY, clipY)
-    local visibleBottom = math.min(blockBottom, clipBottom)
-    local visibleHeight = visibleBottom - visibleTop
-    
-    if visibleHeight > 0 then
-        self.bg.Position = Vector2.new(self.bg.Position.X, visibleTop)
-        self.bg.Size = Vector2.new(self.bg.Size.X, visibleHeight)
-    end
-    
-    local titleY = self.title.Position.Y
-    self.title.Visible = (titleY >= clipY and titleY <= clipBottom) and GUI_Visible and GUI_Initialized
+function Section:SetVisible(visible)
+    self.base.Visible = visible and GUI_Visible and GUI_Initialized
+    self.crust.Visible = visible and GUI_Visible and GUI_Initialized
+    self.border.Visible = visible and GUI_Visible and GUI_Initialized
+    self.title.Visible = visible and GUI_Visible and GUI_Initialized
     
     for _, component in ipairs(self.components) do
-        local compY = component.label.Position.Y
-        local compVisible = compY >= clipY and (compY + CONFIG.LAYOUT.OPTION_HEIGHT) <= clipBottom
-        component:SetVisible(compVisible)
+        component:SetVisible(visible)
     end
 end
 
@@ -824,74 +689,56 @@ function Library:Create(options)
     local self = setmetatable({}, Library)
     
     self.Name = options.Name or "UI Library"
-    self.AccentColor = options.AccentColor or CONFIG.COLORS.TOGGLE_ON
+    self.AccentColor = options.AccentColor or CONFIG.COLORS.ACCENT
     self.ToggleKey = options.ToggleKey or CONFIG.TOGGLE_KEY
     
-    CONFIG.COLORS.TOGGLE_ON = self.AccentColor
-    CONFIG.COLORS.SLIDER_FILL = self.AccentColor
-    CONFIG.COLORS.ACTIVE_TAB = self.AccentColor
-    CONFIG.COLORS.SCROLLBAR_THUMB = self.AccentColor
-    CONFIG.COLORS.CHECKBOX_ON = self.AccentColor
+    CONFIG.COLORS.ACCENT = self.AccentColor
     CONFIG.TOGGLE_KEY = self.ToggleKey
     
     self.tabs = {}
     self.tabButtons = {}
     self.activeTab = nil
     
-    self.leftPanel = CreateDrawing("Square", {
+    -- Main UI elements
+    self.base = CreateDrawing("Square", {
         Filled = true,
-        Color = CONFIG.COLORS.LEFT_PANEL,
-        Transparency = CONFIG.OPACITY.LEFT,
-        ZIndex = CONFIG.ZINDEX.PANEL
+        Color = CONFIG.COLORS.SURFACE,
+        ZIndex = CONFIG.ZINDEX.BASE
     })
     
-    self.rightPanel = CreateDrawing("Square", {
-        Filled = true,
-        Color = CONFIG.COLORS.RIGHT_PANEL,
-        Transparency = CONFIG.OPACITY.RIGHT,
-        ZIndex = CONFIG.ZINDEX.PANEL
+    self.crust = CreateDrawing("Square", {
+        Filled = false,
+        Thickness = 1,
+        Color = CONFIG.COLORS.CRUST,
+        ZIndex = CONFIG.ZINDEX.BASE
     })
     
-    self.nickBlock = CreateDrawing("Square", {
-        Filled = true,
-        Color = CONFIG.COLORS.NICK_BLOCK,
-        Transparency = CONFIG.OPACITY.NICK_BLOCK,
-        ZIndex = CONFIG.ZINDEX.PANEL + 1
+    self.border = CreateDrawing("Square", {
+        Filled = false,
+        Thickness = 1,
+        Color = CONFIG.COLORS.BORDER,
+        ZIndex = CONFIG.ZINDEX.BASE
     })
     
-    self.nickCircle = CreateDrawing("Circle", {
+    self.navbar = CreateDrawing("Square", {
         Filled = true,
-        Color = CONFIG.COLORS.NICK_CIRCLE,
-        Radius = CONFIG.LAYOUT.AVATAR_SIZE / 2,
-        ZIndex = CONFIG.ZINDEX.PANEL + 2
-    })
-    
-    self.avatarImage = LoadAvatar()
-    
-    self.nickText = CreateDrawing("Text", {
-        Text = Player.DisplayName,
-        Size = CONFIG.TEXT_SIZE.NICK,
-        Font = 1,
-        Color = CONFIG.COLORS.TEXT_DEFAULT,
-        Center = false,
-        ZIndex = CONFIG.ZINDEX.PANEL + 2
+        Color = CONFIG.COLORS.BORDER,
+        ZIndex = CONFIG.ZINDEX.BASE + 1
     })
     
     self.title = CreateDrawing("Text", {
         Text = self.Name,
-        Size = CONFIG.TEXT_SIZE.TITLE,
-        Font = 2,
-        Center = true,
-        Color = CONFIG.COLORS.TEXT_DEFAULT,
-        ZIndex = CONFIG.ZINDEX.PANEL + 2
+        Size = CONFIG.TEXT_SIZE,
+        Center = false,
+        Outline = true,
+        Color = CONFIG.COLORS.TEXT,
+        ZIndex = CONFIG.ZINDEX.BASE + 2
     })
     
     self.dragging = false
     self.dragOffset = {x = 0, y = 0}
     self.wasLeftPressed = false
     self.lastToggle = 0
-    
-    ScrollManager:Init()
     
     self:StartLoop()
     
@@ -904,18 +751,28 @@ function Library:Tab(options)
     local tabButton = {
         name = tab.name,
         tab = tab,
-        text = CreateDrawing("Text", {
-            Text = tab.name,
-            Size = CONFIG.TEXT_SIZE.BUTTON,
-            Center = false,
-            Color = CONFIG.COLORS.TEXT_DEFAULT,
+        backdrop = CreateDrawing("Square", {
+            Filled = true,
+            Color = CONFIG.COLORS.BORDER,
+            ZIndex = CONFIG.ZINDEX.PANEL + 1
+        }),
+        shadow = CreateDrawing("Square", {
+            Filled = true,
+            Color = CONFIG.COLORS.SHADOW,
+            ZIndex = CONFIG.ZINDEX.PANEL
+        }),
+        cursor = CreateDrawing("Square", {
+            Filled = true,
+            Color = self.AccentColor,
             ZIndex = CONFIG.ZINDEX.PANEL + 2
         }),
-        box = CreateDrawing("Square", {
-            Filled = true,
-            Color = Color3.fromRGB(0, 0, 0),
-            Transparency = 0,
-            ZIndex = CONFIG.ZINDEX.PANEL + 1
+        text = CreateDrawing("Text", {
+            Text = tab.name,
+            Size = CONFIG.TEXT_SIZE,
+            Center = false,
+            Outline = true,
+            Color = CONFIG.COLORS.TEXT,
+            ZIndex = CONFIG.ZINDEX.PANEL + 2
         })
     }
     
@@ -935,118 +792,92 @@ function Library:SwitchTab(targetTab)
     end
     targetTab.isActive = true
     self.activeTab = targetTab
-    ScrollManager.offset = 0
 end
 
 function Library:UpdateUI()
-    self.leftPanel.Position = Vector2.new(Panel.x, Panel.y)
-    self.leftPanel.Size = Vector2.new(CONFIG.GUI.LEFT_WIDTH, CONFIG.GUI.HEIGHT)
-    self.leftPanel.Visible = GUI_Visible and GUI_Initialized
+    self.base.Position = Vector2.new(Panel.x, Panel.y)
+    self.base.Size = Vector2.new(CONFIG.GUI.WIDTH, CONFIG.GUI.HEIGHT)
+    self.base.Visible = GUI_Visible and GUI_Initialized
     
-    self.rightPanel.Position = Vector2.new(Panel.x + CONFIG.GUI.LEFT_WIDTH, Panel.y)
-    self.rightPanel.Size = Vector2.new(CONFIG.GUI.WIDTH - CONFIG.GUI.LEFT_WIDTH, CONFIG.GUI.HEIGHT)
-    self.rightPanel.Visible = GUI_Visible and GUI_Initialized
+    self.crust.Position = Vector2.new(Panel.x, Panel.y)
+    self.crust.Size = Vector2.new(CONFIG.GUI.WIDTH, CONFIG.GUI.HEIGHT)
+    self.crust.Visible = GUI_Visible and GUI_Initialized
     
-    self.nickBlock.Position = Vector2.new(Panel.x, Panel.y + CONFIG.GUI.HEIGHT - CONFIG.LAYOUT.NICK_HEIGHT)
-    self.nickBlock.Size = Vector2.new(CONFIG.GUI.LEFT_WIDTH, CONFIG.LAYOUT.NICK_HEIGHT)
-    self.nickBlock.Visible = GUI_Visible and GUI_Initialized
+    self.border.Position = Vector2.new(Panel.x + 1, Panel.y + 1)
+    self.border.Size = Vector2.new(CONFIG.GUI.WIDTH - 2, CONFIG.GUI.HEIGHT - 2)
+    self.border.Visible = GUI_Visible and GUI_Initialized
     
-    local circleX = Panel.x + 10 + CONFIG.LAYOUT.AVATAR_SIZE / 2
-    local circleY = Panel.y + CONFIG.GUI.HEIGHT - CONFIG.LAYOUT.NICK_HEIGHT / 2
+    self.navbar.Position = Vector2.new(Panel.x + 2, Panel.y + 2)
+    self.navbar.Size = Vector2.new(CONFIG.GUI.WIDTH - 4, CONFIG.GUI.TITLE_HEIGHT - 4)
+    self.navbar.Visible = GUI_Visible and GUI_Initialized
     
-    self.nickCircle.Position = Vector2.new(circleX, circleY)
-    self.nickCircle.Visible = GUI_Visible and GUI_Initialized
-    
-    if self.avatarImage then
-        self.avatarImage.Position = Vector2.new(
-            circleX - CONFIG.LAYOUT.AVATAR_SIZE / 2,
-            circleY - CONFIG.LAYOUT.AVATAR_SIZE / 2
-        )
-        self.avatarImage.Visible = GUI_Visible and GUI_Initialized
-    end
-    
-    self.nickText.Position = Vector2.new(
-        Panel.x + 10 + CONFIG.LAYOUT.AVATAR_SIZE + 10,
-        Panel.y + CONFIG.GUI.HEIGHT - CONFIG.LAYOUT.NICK_HEIGHT / 2 - 8
-    )
-    self.nickText.Visible = GUI_Visible and GUI_Initialized
-    
-    self.title.Position = Vector2.new(
-        Panel.x + CONFIG.GUI.LEFT_WIDTH / 2,
-        Panel.y + 20
-    )
+    self.title.Position = Vector2.new(Panel.x + 7, Panel.y + 6)
     self.title.Visible = GUI_Visible and GUI_Initialized
     
+    -- Update tabs
+    local numTabs = #self.tabButtons
+    local tabWidth = (CONFIG.GUI.WIDTH - CONFIG.LAYOUT.PADDING * 2 - (numTabs - 1) * 2) / numTabs
+    
     for i, tabButton in ipairs(self.tabButtons) do
-        local textY = Panel.y + 60 + (i - 1) * CONFIG.LAYOUT.LINE_SPACING
-        tabButton.text.Position = Vector2.new(Panel.x + CONFIG.LAYOUT.TEXT_OFFSET_X - 20, textY)
+        local tabX = Panel.x + CONFIG.LAYOUT.PADDING + (i - 1) * (tabWidth + 2)
+        local tabY = Panel.y + CONFIG.GUI.TITLE_HEIGHT + CONFIG.LAYOUT.PADDING
+        
+        tabButton.backdrop.Position = Vector2.new(tabX, tabY)
+        tabButton.backdrop.Size = Vector2.new(tabWidth, CONFIG.GUI.TAB_HEIGHT)
+        tabButton.backdrop.Visible = GUI_Visible and GUI_Initialized
+        
+        tabButton.shadow.Position = Vector2.new(tabX, tabY + CONFIG.GUI.TAB_HEIGHT)
+        local tabW = (CONFIG.GUI.WIDTH - CONFIG.LAYOUT.PADDING * 2 - (numTabs - 1) * 2) / numTabs
+        
+        tabButton.shadow.Position = Vector2.new(tabX, tabY + CONFIG.GUI.TAB_HEIGHT - 8)
+        tabButton.shadow.Size = Vector2.new(tabWidth, 8)
+        tabButton.shadow.Transparency = 0.05
+        tabButton.shadow.Visible = GUI_Visible and GUI_Initialized
+        
+        tabButton.cursor.Position = Vector2.new(tabX, tabY)
+        tabButton.cursor.Size = Vector2.new(tabWidth, 1)
+        tabButton.cursor.Visible = tabButton.tab.isActive and GUI_Visible and GUI_Initialized
+        tabButton.cursor.Color = self.AccentColor
+        
+        local textW, textH = GetTextBounds(tabButton.name)
+        tabButton.text.Position = Vector2.new(tabX + 4, tabY + CONFIG.GUI.TAB_HEIGHT / 2 - textH / 2)
         tabButton.text.Visible = GUI_Visible and GUI_Initialized
-        tabButton.box.Position = Vector2.new(Panel.x + 10, textY - 5)
-        tabButton.box.Size = Vector2.new(CONFIG.GUI.LEFT_WIDTH - 20, CONFIG.LAYOUT.LINE_SPACING - 10)
-        tabButton.box.Visible = GUI_Visible and GUI_Initialized
-        tabButton.text.Color = tabButton.tab.isActive and self.AccentColor or CONFIG.COLORS.TEXT_DEFAULT
-    end
-end
-
-function Library:UpdateBlocks()
-    if not GUI_Initialized then return end
-    
-    local rightX = Panel.x + CONFIG.GUI.LEFT_WIDTH
-    local rightY = Panel.y
-    local rightWidth = CONFIG.GUI.WIDTH - CONFIG.GUI.LEFT_WIDTH
-    local rightHeight = CONFIG.GUI.HEIGHT
-    local blockWidth = (rightWidth - CONFIG.LAYOUT.BLOCK_SPACING * 3 - CONFIG.LAYOUT.SCROLLBAR_WIDTH - 10) / 2
-    
-    for _, tab in ipairs(self.tabs) do
-        if tab.isActive then
-            local col1Y = rightY + CONFIG.LAYOUT.BLOCK_SPACING - ScrollManager.offset
-            local col2Y = rightY + CONFIG.LAYOUT.BLOCK_SPACING - ScrollManager.offset
-            local maxHeight = 0
-            
-            for i, section in ipairs(tab.sections) do
-                local col = ((i - 1) % 2) + 1
-                local x = col == 1 and (rightX + CONFIG.LAYOUT.BLOCK_SPACING) or (rightX + blockWidth + CONFIG.LAYOUT.BLOCK_SPACING * 2)
-                local y = col == 1 and col1Y or col2Y
-                
-                local height = section:UpdateBlock(x, y, blockWidth)
-                section:SetVisible(GUI_Visible, rightY, rightHeight)
-                
-                if col == 1 then
-                    col1Y = col1Y + height + CONFIG.LAYOUT.BLOCK_SPACING
-                    maxHeight = math.max(maxHeight, col1Y - rightY + ScrollManager.offset)
-                else
-                    col2Y = col2Y + height + CONFIG.LAYOUT.BLOCK_SPACING
-                    maxHeight = math.max(maxHeight, col2Y - rightY + ScrollManager.offset)
-                end
-            end
-            
-            ScrollManager:UpdateMaxOffset(maxHeight, rightHeight)
-        else
-            for _, section in ipairs(tab.sections) do
-                section:SetVisible(false, 0, 0)
-            end
+        
+        -- Handle tab click
+        if clickFrame and PointInRect(mx, my, tabX, tabY, tabWidth, CONFIG.GUI.TAB_HEIGHT) then
+            self:SwitchTab(tabButton.tab)
         end
     end
     
-    ScrollManager:Update()
+    -- Update sections for active tab
+    if self.activeTab then
+        local contentY = Panel.y + CONFIG.GUI.TITLE_HEIGHT + CONFIG.GUI.TAB_HEIGHT + CONFIG.LAYOUT.PADDING * 2
+        local contentHeight = CONFIG.GUI.HEIGHT - CONFIG.GUI.TITLE_HEIGHT - CONFIG.GUI.TAB_HEIGHT - CONFIG.LAYOUT.PADDING * 3
+        local sectionWidth = CONFIG.GUI.WIDTH - CONFIG.LAYOUT.PADDING * 2
+        
+        for _, section in ipairs(self.activeTab.sections) do
+            if section.base.Visible then
+                local sectionHeight = section:UpdateSection(Panel.x + CONFIG.LAYOUT.PADDING, contentY, sectionWidth)
+                contentY = contentY + sectionHeight + CONFIG.LAYOUT.SECTION_SPACING
+            end
+        end
+    end
 end
 
 function Library:HandleClick(mx, my)
-    if ScrollManager:StartThumbDrag(mx, my) then return end
-    
+    -- Handle tab clicks
     for _, tabButton in ipairs(self.tabButtons) do
-        local pos = tabButton.box.Position
-        local size = tabButton.box.Size
+        local pos = tabButton.backdrop.Position
+        local size = tabButton.backdrop.Size
         if PointInRect(mx, my, pos.X, pos.Y, size.X, size.Y) then
             self:SwitchTab(tabButton.tab)
             return
         end
     end
     
+    -- Handle component clicks
     if self.activeTab then
         for _, section in ipairs(self.activeTab.sections) do
-            if not section.bg.Visible then continue end
-            
             for _, component in ipairs(section.components) do
                 if component.HandleClick and component:HandleClick(mx, my) then
                     return
@@ -1058,7 +889,8 @@ function Library:HandleClick(mx, my)
         end
     end
     
-    if PointInRect(mx, my, Panel.x, Panel.y, CONFIG.GUI.WIDTH, CONFIG.GUI.HEIGHT) then
+    -- Handle dragging
+    if PointInRect(mx, my, Panel.x, Panel.y, CONFIG.GUI.WIDTH, CONFIG.GUI.TITLE_HEIGHT) then
         self.dragging = true
         self.dragOffset.x = mx - Panel.x
         self.dragOffset.y = my - Panel.y
@@ -1078,13 +910,13 @@ function Library:HandleInput()
                 end
             end
         end
-        ScrollManager:StopThumbDrag()
         return
     end
     
-    local mp = Services.Mouse:GetMouseLocation()
-    local mx, my = mp.X, mp.Y
-    local leftPressed = isleftpressed()
+    local mouse = Services.Mouse
+    local mouseLocation = mouse:GetMouseLocation()
+    local mx, my = mouseLocation.X, mouseLocation.Y
+    local leftPressed = mouse:IsMouseButtonPressed(Enum.UserInputType.MouseButton1)
     
     if leftPressed then
         if self.activeTab then
@@ -1096,8 +928,6 @@ function Library:HandleInput()
                 end
             end
         end
-        
-        ScrollManager:HandleThumbDrag(mx, my)
         
         if not self.wasLeftPressed then
             self:HandleClick(mx, my)
@@ -1113,7 +943,6 @@ function Library:HandleInput()
                     end
                 end
             end
-            ScrollManager:StopThumbDrag()
         end
         self.dragging = false
     end
@@ -1127,9 +956,11 @@ function Library:HandleInput()
 end
 
 function Library:HandleToggle()
-    if not getpressedkeys then return end
-    for _, k in ipairs(getpressedkeys()) do
-        if k == CONFIG.TOGGLE_KEY then
+    local inputService = Services.Mouse
+    local keysPressed = inputService:GetKeysPressed()
+    
+    for _, key in ipairs(keysPressed) do
+        if key.KeyCode.Name == CONFIG.TOGGLE_KEY then
             local now = tick()
             if now - self.lastToggle > CONFIG.TOGGLE_COOLDOWN then
                 GUI_Visible = not GUI_Visible
@@ -1152,13 +983,12 @@ function Library:HandleToggle()
 end
 
 function Library:StartLoop()
-    Services.Run.Render:Connect(function()
+    Services.Run.RenderStepped:Connect(function()
         self:HandleToggle()
         if not GUI_Visible then return end
         
         self:HandleInput()
         self:UpdateUI()
-        self:UpdateBlocks()
     end)
 end
 
