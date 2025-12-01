@@ -982,18 +982,15 @@ function Library:HandleToggle()
     end
 end
 
-function Library:StartLoop()
-    Services.Run:BindToRenderStep("UILibrary_Loop", Enum.RenderPriority.Last.Value, function()
-        self:HandleToggle()
-        if not GUI_Visible then return end
-        
-        self:HandleInput()
-        self:UpdateUI()
-    end)
+function Library:Step()
+    self:HandleToggle()
+    if not GUI_Visible then return end
+    
+    self:HandleInput()
+    self:UpdateUI()
 end
 
 function Library:Unload()
-    Services.Run:UnbindFromRenderStep("UILibrary_Loop")
     for _, obj in ipairs(DrawingObjects) do
         obj:Remove()
     end
