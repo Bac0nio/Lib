@@ -983,7 +983,7 @@ function Library:HandleToggle()
 end
 
 function Library:StartLoop()
-    Services.Run.RenderStepped:Connect(function()
+    Services.Run:BindToRenderStep("UILibrary_Loop", Enum.RenderPriority.Last.Value, function()
         self:HandleToggle()
         if not GUI_Visible then return end
         
@@ -993,6 +993,7 @@ function Library:StartLoop()
 end
 
 function Library:Unload()
+    Services.Run:UnbindFromRenderStep("UILibrary_Loop")
     for _, obj in ipairs(DrawingObjects) do
         obj:Remove()
     end
